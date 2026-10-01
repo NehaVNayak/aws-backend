@@ -1,12 +1,3 @@
-
-// =============================================================================
-// Jenkinsfile — Backend (Spring Boot)
-// Windows Jenkins Agent
-//
-// Pipeline:
-// Clean Compile → Build JAR → Docker Image → Push ECR → Deploy EC2
-// =============================================================================
-
 pipeline {
 
     agent any
@@ -33,20 +24,11 @@ pipeline {
 
         S3_BUCKET      = 's3-test-01-navaneeth'
 
-        // IMPORTANT:
-        // Put your NEW rotated AWS credentials here.
-        // Do not use credentials that have already been exposed.
-
-        AWS_ACCESS_KEY_ID     = 'YOUR_NEW_AWS_ACCESS_KEY'
-        AWS_SECRET_ACCESS_KEY = 'YOUR_NEW_AWS_SECRET_KEY'
+        AWS_ACCESS_KEY_ID     = 'AKIA45Y2RN7RMG4YUQQ4'
+        AWS_SECRET_ACCESS_KEY = 'cYOV6qZs4dZ/F/pHAEO0tnApFBgXhYhIKX+qVX1E'
     }
 
-
     stages {
-
-        // =====================================================================
-        // STAGE 1 — Clean & Compile
-        // =====================================================================
 
         stage('Clean & Compile') {
 
@@ -56,7 +38,7 @@ pipeline {
                     echo ========================================
                     echo Cleaning and compiling backend
                     echo ========================================
-                    
+
                     dir
 
                     mvnw.cmd clean compile -B
@@ -68,10 +50,6 @@ pipeline {
             }
         }
 
-
-        // =====================================================================
-        // STAGE 2 — Build JAR
-        // =====================================================================
 
         stage('Build JAR') {
 
@@ -105,10 +83,6 @@ pipeline {
         }
 
 
-        // =====================================================================
-        // STAGE 3 — Build Docker Image
-        // =====================================================================
-
         stage('Build Docker Image') {
 
             steps {
@@ -129,10 +103,6 @@ pipeline {
         }
 
 
-        // =====================================================================
-        // STAGE 4 — Push Docker Image to ECR
-        // =====================================================================
-
         stage('Push to ECR') {
 
             steps {
@@ -146,6 +116,13 @@ pipeline {
                     set AWS_ACCESS_KEY_ID=%AWS_ACCESS_KEY_ID%
                     set AWS_SECRET_ACCESS_KEY=%AWS_SECRET_ACCESS_KEY%
                     set AWS_DEFAULT_REGION=${AWS_REGION}
+
+                    aws sts get-caller-identity
+
+                    if %ERRORLEVEL% NEQ 0 (
+                        echo AWS CREDENTIALS ARE INVALID
+                        exit /b 1
+                    )
 
                     aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
 
@@ -174,16 +151,9 @@ pipeline {
         }
 
 
-        // =====================================================================
-        // STAGE 5 — Deploy to EC2
-        // =====================================================================
-
         stage('Deploy to EC2') {
 
             steps {
-
-                // Only the EC2 PEM key comes from Jenkins Credentials.
-                // AWS credentials come from the environment above.
 
                 withCredentials([
                     sshUserPrivateKey(
@@ -192,11 +162,6 @@ pipeline {
                     )
                 ]) {
 
-
-                    // =========================================================
-                    // Create deployment script
-                    // =========================================================
-
                     writeFile(
                         file: 'deploy_backend.sh',
                         text: """#!/bin/bash
@@ -204,13 +169,20 @@ pipeline {
 set -e
 
 echo "========================================"
-echo "AWS Configuration"
+echo "AWS CONFIGURATION"
 echo "========================================"
 
 export AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'
 export AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}'
 export AWS_REGION='${AWS_REGION}'
 export AWS_S3_BUCKET_NAME='${S3_BUCKET}'
+
+
+echo "========================================"
+echo "CHECKING AWS CREDENTIALS"
+echo "========================================"
+
+aws sts get-caller-identity
 
 
 echo "========================================"
@@ -244,14 +216,14 @@ docker image prune -f || true
 
 
 echo "========================================"
-echo "Creating Docker network if required"
+echo "Creating Docker network"
 echo "========================================"
 
 docker network inspect ${DOCKER_NETWORK} >/dev/null 2>&1 || docker network create ${DOCKER_NETWORK}
 
 
 echo "========================================"
-echo "Starting new backend container"
+echo "Starting backend container"
 echo "========================================"
 
 docker run -d \\
@@ -281,10 +253,6 @@ echo "========================================"
                     )
 
 
-                    // =========================================================
-                    // Copy deployment script to EC2
-                    // =========================================================
-
                     bat """
 
                         echo ========================================
@@ -296,24 +264,16 @@ echo "========================================"
                     """
 
 
-                    // =========================================================
-                    // Execute deployment script on EC2
-                    // =========================================================
-
                     bat """
 
                         echo ========================================
                         echo Executing deployment on EC2
                         echo ========================================
 
-                        ssh -o StrictHostKeyChecking=no -i "%PEM_FILE%" ${EC2_USER}@${EC2_HOST} "export AWS_ACCESS_KEY_ID=%AWS_ACCESS_KEY_ID% && export AWS_SECRET_ACCESS_KEY=%AWS_SECRET_ACCESS_KEY% && export AWS_REGION=${AWS_REGION} && export AWS_S3_BUCKET_NAME=${S3_BUCKET} && chmod +x /tmp/deploy_backend.sh && bash /tmp/deploy_backend.sh"
+                        ssh -o StrictHostKeyChecking=no -i "%PEM_FILE%" ${EC2_USER}@${EC2_HOST} "chmod +x /tmp/deploy_backend.sh && bash /tmp/deploy_backend.sh"
 
                     """
 
-
-                    // =========================================================
-                    // Remove temporary deployment script
-                    // =========================================================
 
                     bat """
 
@@ -326,10 +286,6 @@ echo "========================================"
     }
 
 
-    // =========================================================================
-    // POST ACTIONS
-    // =========================================================================
-
     post {
 
         success {
@@ -337,7 +293,9 @@ echo "========================================"
             echo """
 ========================================
 SUCCESS
-Backend deployed successfully
+========================================
+
+Backend deployed successfully.
 
 Docker Image:
 ${FULL_IMAGE}
@@ -364,6 +322,7 @@ ${S3_BUCKET}
             echo """
 ========================================
 FAILED
+========================================
 
 Backend pipeline failed.
 Check the stage logs above.
@@ -381,4 +340,3 @@ Check the stage logs above.
         }
     }
 }
-
