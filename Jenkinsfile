@@ -31,13 +31,6 @@ pipeline {
         S3_BUCKET           = 's3-test-01-navaneeth'
     }
 
-    // -------------------------------------------------------------------------
-    // Tools (configure these names in Jenkins → Global Tool Configuration)
-    // -------------------------------------------------------------------------
-    tools {
-        maven 'Maven-3'   // name you gave Maven in Jenkins tool config
-        jdk   'JDK-21'   // name you gave JDK 21 in Jenkins tool config
-    }
 
     stages {
 
