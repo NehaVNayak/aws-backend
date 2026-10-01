@@ -11,10 +11,6 @@ pipeline {
 
     agent any
 
-    // =========================================================================
-    // ENVIRONMENT VARIABLES
-    // =========================================================================
-
     environment {
 
         AWS_REGION     = 'us-east-1'
@@ -37,10 +33,9 @@ pipeline {
 
         S3_BUCKET      = 's3-test-01-navaneeth'
 
-        // =========================================================================
-        // AWS CREDENTIALS
-        // Replace these with your NEW rotated AWS credentials.
-        // =========================================================================
+        // IMPORTANT:
+        // Put your NEW rotated AWS credentials here.
+        // Do not use credentials that have already been exposed.
 
         AWS_ACCESS_KEY_ID     = 'YOUR_NEW_AWS_ACCESS_KEY'
         AWS_SECRET_ACCESS_KEY = 'YOUR_NEW_AWS_SECRET_KEY'
@@ -61,7 +56,7 @@ pipeline {
                     echo ========================================
                     echo Cleaning and compiling backend
                     echo ========================================
-
+                    
                     dir
 
                     mvnw.cmd clean compile -B
@@ -187,7 +182,7 @@ pipeline {
 
             steps {
 
-                // Only EC2 PEM is retrieved from Jenkins credentials.
+                // Only the EC2 PEM key comes from Jenkins Credentials.
                 // AWS credentials come from the environment above.
 
                 withCredentials([
