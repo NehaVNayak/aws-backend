@@ -41,16 +41,15 @@ pipeline {
 
             steps {
 
-                dir('backend') {
+                bat '''
+                    echo ========================================
+                    echo Cleaning and compiling backend
+                    echo ========================================
 
-                    bat '''
-                        echo ========================================
-                        echo Cleaning and compiling backend
-                        echo ========================================
+                    dir
 
-                        mvnw.cmd clean compile -B
-                    '''
-                }
+                    mvnw.cmd clean compile -B
+                '''
             }
         }
 
@@ -61,20 +60,19 @@ pipeline {
 
             steps {
 
-                dir('backend') {
+                bat '''
+                    echo ========================================
+                    echo Packaging Spring Boot JAR
+                    echo ========================================
 
-                    bat '''
-                        echo ========================================
-                        echo Packaging Spring Boot JAR
-                        echo ========================================
+                    mvnw.cmd package -DskipTests -B
 
-                        mvnw.cmd package -DskipTests -B
+                    echo ========================================
+                    echo JAR BUILD COMPLETE
+                    echo ========================================
 
-                        echo ========================================
-                        echo JAR BUILD COMPLETE
-                        echo ========================================
-                    '''
-                }
+                    dir target
+                '''
             }
 
             post {
@@ -82,7 +80,7 @@ pipeline {
                 success {
 
                     archiveArtifacts(
-                        artifacts: 'backend/target/*.jar',
+                        artifacts: 'target/*.jar',
                         fingerprint: true
                     )
                 }
@@ -96,21 +94,18 @@ pipeline {
 
             steps {
 
-                dir('backend') {
+                bat """
+                    echo ========================================
+                    echo Building Docker Image
+                    echo ========================================
 
-                    bat """
-                        echo ========================================
-                        echo Building Docker Image
-                        echo ========================================
+                    docker build -t ${FULL_IMAGE} .
 
-                        docker build -t ${FULL_IMAGE} .
-
-                        echo ========================================
-                        echo Docker image built:
-                        echo ${FULL_IMAGE}
-                        echo ========================================
-                    """
-                }
+                    echo ========================================
+                    echo Docker image built:
+                    echo ${FULL_IMAGE}
+                    echo ========================================
+                """
             }
         }
 
@@ -288,7 +283,7 @@ echo "========================================"
                     """
 
                     // =========================================================
-                    // Remove temporary script from Jenkins workspace
+                    // Remove temporary deployment script
                     // =========================================================
 
                     bat """
