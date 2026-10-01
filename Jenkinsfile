@@ -1,4 +1,4 @@
-```groovy
+
 // =============================================================================
 // Jenkinsfile — Backend (Spring Boot)
 // Windows Jenkins Agent
@@ -381,4 +381,4 @@ Check the stage logs above.
         }
     }
 }
-```
+
