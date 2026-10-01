@@ -1,3 +1,4 @@
+```groovy
 // =============================================================================
 // Jenkinsfile — Backend (Spring Boot)
 // Windows Jenkins Agent
@@ -10,7 +11,12 @@ pipeline {
 
     agent any
 
+    // =========================================================================
+    // ENVIRONMENT VARIABLES
+    // =========================================================================
+
     environment {
+
         AWS_REGION     = 'us-east-1'
         AWS_ACCOUNT_ID = '888577028066'
 
@@ -31,15 +37,22 @@ pipeline {
 
         S3_BUCKET      = 's3-test-01-navaneeth'
 
-        AWS_ACCESS_KEY_ID = 'AKIA45Y2RN7RMG4YUQQ4'
-        AWS_SECRET_ACCESS_KEY = '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'
+        // =========================================================================
+        // AWS CREDENTIALS
+        // Replace these with your NEW rotated AWS credentials.
+        // =========================================================================
+
+        AWS_ACCESS_KEY_ID     = 'YOUR_NEW_AWS_ACCESS_KEY'
+        AWS_SECRET_ACCESS_KEY = 'YOUR_NEW_AWS_SECRET_KEY'
     }
+
 
     stages {
 
         // =====================================================================
         // STAGE 1 — Clean & Compile
         // =====================================================================
+
         stage('Clean & Compile') {
 
             steps {
@@ -52,13 +65,19 @@ pipeline {
                     dir
 
                     mvnw.cmd clean compile -B
+
+                    echo ========================================
+                    echo COMPILE COMPLETE
+                    echo ========================================
                 '''
             }
         }
 
+
         // =====================================================================
         // STAGE 2 — Build JAR
         // =====================================================================
+
         stage('Build JAR') {
 
             steps {
@@ -90,9 +109,11 @@ pipeline {
             }
         }
 
+
         // =====================================================================
         // STAGE 3 — Build Docker Image
         // =====================================================================
+
         stage('Build Docker Image') {
 
             steps {
@@ -112,77 +133,70 @@ pipeline {
             }
         }
 
+
         // =====================================================================
         // STAGE 4 — Push Docker Image to ECR
         // =====================================================================
+
         stage('Push to ECR') {
 
             steps {
 
-                withCredentials([
+                bat """
 
-                    string(
-                        credentialsId: 'AWS_ACCESS_KEY_ID',
-                        variable: 'AWS_ACCESS_KEY_ID'
-                    ),
+                    echo ========================================
+                    echo Logging into AWS ECR
+                    echo ========================================
 
-                    string(
-                        credentialsId: 'AWS_SECRET_ACCESS_KEY',
-                        variable: 'AWS_SECRET_ACCESS_KEY'
+                    set AWS_ACCESS_KEY_ID=%AWS_ACCESS_KEY_ID%
+                    set AWS_SECRET_ACCESS_KEY=%AWS_SECRET_ACCESS_KEY%
+                    set AWS_DEFAULT_REGION=${AWS_REGION}
+
+                    aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+
+                    if %ERRORLEVEL% NEQ 0 (
+                        echo ECR LOGIN FAILED
+                        exit /b 1
                     )
 
-                ]) {
+                    echo ========================================
+                    echo Pushing Docker Image to ECR
+                    echo ========================================
 
-                    bat """
-                        echo ========================================
-                        echo Logging into AWS ECR
-                        echo ========================================
+                    docker push ${FULL_IMAGE}
 
-                        set AWS_ACCESS_KEY_ID=%AWS_ACCESS_KEY_ID%
-                        set AWS_SECRET_ACCESS_KEY=%AWS_SECRET_ACCESS_KEY%
-                        set AWS_DEFAULT_REGION=${AWS_REGION}
+                    if %ERRORLEVEL% NEQ 0 (
+                        echo ECR PUSH FAILED
+                        exit /b 1
+                    )
 
-                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                    echo ========================================
+                    echo ECR PUSH COMPLETE
+                    echo ========================================
 
-                        echo ========================================
-                        echo Pushing Docker Image to ECR
-                        echo ========================================
-
-                        docker push ${FULL_IMAGE}
-
-                        echo ========================================
-                        echo ECR PUSH COMPLETE
-                        echo ========================================
-                    """
-                }
+                """
             }
         }
+
 
         // =====================================================================
         // STAGE 5 — Deploy to EC2
         // =====================================================================
+
         stage('Deploy to EC2') {
 
             steps {
 
-                withCredentials([
+                // Only EC2 PEM is retrieved from Jenkins credentials.
+                // AWS credentials come from the environment above.
 
+                withCredentials([
                     sshUserPrivateKey(
                         credentialsId: 'EC2_PEM_KEY',
                         keyFileVariable: 'PEM_FILE'
-                    ),
-
-                    string(
-                        credentialsId: 'AWS_ACCESS_KEY_ID',
-                        variable: 'AWS_ACCESS_KEY_ID'
-                    ),
-
-                    string(
-                        credentialsId: 'AWS_SECRET_ACCESS_KEY',
-                        variable: 'AWS_SECRET_ACCESS_KEY'
                     )
-
                 ]) {
+
 
                     // =========================================================
                     // Create deployment script
@@ -193,6 +207,16 @@ pipeline {
                         text: """#!/bin/bash
 
 set -e
+
+echo "========================================"
+echo "AWS Configuration"
+echo "========================================"
+
+export AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'
+export AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}'
+export AWS_REGION='${AWS_REGION}'
+export AWS_S3_BUCKET_NAME='${S3_BUCKET}'
+
 
 echo "========================================"
 echo "Logging into AWS ECR"
@@ -242,13 +266,13 @@ docker run -d \\
     -p ${HOST_PORT}:${CONTAINER_PORT} \\
     -e AWS_ACCESS_KEY_ID="\$AWS_ACCESS_KEY_ID" \\
     -e AWS_SECRET_ACCESS_KEY="\$AWS_SECRET_ACCESS_KEY" \\
-    -e AWS_REGION="${AWS_REGION}" \\
-    -e AWS_S3_BUCKET_NAME="${S3_BUCKET}" \\
+    -e AWS_REGION="\$AWS_REGION" \\
+    -e AWS_S3_BUCKET_NAME="\$AWS_S3_BUCKET_NAME" \\
     ${FULL_IMAGE}
 
 
 echo "========================================"
-echo "Running containers"
+echo "Checking backend container"
 echo "========================================"
 
 docker ps --filter name=${CONTAINER_NAME}
@@ -261,41 +285,51 @@ echo "========================================"
 """
                     )
 
+
                     // =========================================================
                     // Copy deployment script to EC2
                     // =========================================================
 
                     bat """
+
                         echo ========================================
                         echo Copying deployment script to EC2
                         echo ========================================
 
                         scp -o StrictHostKeyChecking=no -i "%PEM_FILE%" deploy_backend.sh ${EC2_USER}@${EC2_HOST}:/tmp/deploy_backend.sh
+
                     """
+
 
                     // =========================================================
                     // Execute deployment script on EC2
                     // =========================================================
 
                     bat """
+
                         echo ========================================
                         echo Executing deployment on EC2
                         echo ========================================
 
-                        ssh -o StrictHostKeyChecking=no -i "%PEM_FILE%" ${EC2_USER}@${EC2_HOST} "export AWS_ACCESS_KEY_ID=%AWS_ACCESS_KEY_ID% && export AWS_SECRET_ACCESS_KEY=%AWS_SECRET_ACCESS_KEY% && chmod +x /tmp/deploy_backend.sh && bash /tmp/deploy_backend.sh"
+                        ssh -o StrictHostKeyChecking=no -i "%PEM_FILE%" ${EC2_USER}@${EC2_HOST} "export AWS_ACCESS_KEY_ID=%AWS_ACCESS_KEY_ID% && export AWS_SECRET_ACCESS_KEY=%AWS_SECRET_ACCESS_KEY% && export AWS_REGION=${AWS_REGION} && export AWS_S3_BUCKET_NAME=${S3_BUCKET} && chmod +x /tmp/deploy_backend.sh && bash /tmp/deploy_backend.sh"
+
                     """
+
 
                     // =========================================================
                     // Remove temporary deployment script
                     // =========================================================
 
                     bat """
+
                         if exist deploy_backend.sh del deploy_backend.sh
+
                     """
                 }
             }
         }
     }
+
 
     // =========================================================================
     // POST ACTIONS
@@ -305,21 +339,44 @@ echo "========================================"
 
         success {
 
-            echo "========================================"
-            echo "SUCCESS"
-            echo "Backend deployed successfully"
-            echo "Docker Image: ${FULL_IMAGE}"
-            echo "========================================"
+            echo """
+========================================
+SUCCESS
+Backend deployed successfully
+
+Docker Image:
+${FULL_IMAGE}
+
+EC2:
+${EC2_HOST}
+
+Container:
+${CONTAINER_NAME}
+
+Port:
+${HOST_PORT}:${CONTAINER_PORT}
+
+S3 Bucket:
+${S3_BUCKET}
+
+========================================
+"""
         }
+
 
         failure {
 
-            echo "========================================"
-            echo "FAILED"
-            echo "Backend pipeline failed."
-            echo "Check the stage logs above."
-            echo "========================================"
+            echo """
+========================================
+FAILED
+
+Backend pipeline failed.
+Check the stage logs above.
+
+========================================
+"""
         }
+
 
         always {
 
@@ -329,3 +386,4 @@ echo "========================================"
         }
     }
 }
+```
