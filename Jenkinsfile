@@ -30,6 +30,9 @@ pipeline {
         CONTAINER_PORT = '8085'
 
         S3_BUCKET      = 's3-test-01-navaneeth'
+
+        AWS_ACCESS_KEY_ID = 'AKIA45Y2RN7RMG4YUQQ4'
+        AWS_SECRET_ACCESS_KEY = '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'
     }
 
     stages {
